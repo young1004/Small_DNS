@@ -3,6 +3,8 @@
 * 작성 일시 : 2020-10-06
 * 작성자    : 조용구
 * 입력 방식 : 파일 실행시 IP혹은 domain을 첫번째 인수로 입력, 두번째 인수로 포트번호 입력
+
+* - 1회 연결 당 최대 30회의 query 가능
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,9 +49,10 @@ int main(int argc, char **argv)
     {
         while (1)
         {
-            fputs("insert IP or domain (q to quit) : ", stdout);
-            fgets(message, BUFSIZE, stdin);
-            if (!strcmp(message, "q\n"))
+            printf("insert IP or domain (q to quit) : ");
+            scanf("%s", message);
+            
+            if (!strcmp(message, "q\0"))
             {
                 shutdown(sock, SHUT_WR);
                 close(sock);
