@@ -103,7 +103,7 @@ int main(int argc, char **argv)
     if (dns_file == NULL)
         printf("dns 테이블 로딩 실패!\n");
     
-    
+    free(log_time);
 
     if (argc != 2)
     {
