@@ -12,46 +12,68 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+#define BUFSIZE 50
+
 void error_handling(char *message);
 
 int main(int argc, char **argv)
 {
     int sock;
-    int clnt_sock;
-    struct sockaddr_in serv_addr;
-    
-    char message[30];
+    pid_t pid;
+    char message[BUFSIZE];
     int str_len;
 
+    struct sockaddr_in serv_addr;
     if (argc != 3)
     {
-        printf("Usage: %s <IP/Domain> <port> \n", argv[0]);
+        printf("Usage : %s <IP> <port>\n", argv[0]);
         exit(1);
     }
+
     sock = socket(PF_INET, SOCK_STREAM, 0);
     if (sock == -1)
         error_handling("socket() error");
 
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY); // 다른 서버 연결시 인수 추가
+    serv_addr.sin_addr.s_addr = inet_addr(argv[1]);
     serv_addr.sin_port = htons(atoi(argv[2]));
 
     if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) == -1)
-        error_handling("connet() error");
+        error_handling("connect() error!");
 
-    strcpy(message, argv[1]);
-    write(sock, message, sizeof(message));
+    pid = fork();
+    if (pid == 0)
+    {
+        while (1)
+        {
+            fputs("insert IP or domain (q to quit) : ", stdout);
+            fgets(message, BUFSIZE, stdin);
+            if (!strcmp(message, "q\n"))
+            {
+                shutdown(sock, SHUT_WR);
+                close(sock);
+                exit(0);
+            }
+            write(sock, message, strlen(message));
+        } /* while(1) end */
+    }     /* if(pid==0) end */
+    else
+    {
+        while (1)
+        {
+            int str_len = read(sock, message, BUFSIZE);
+            if (str_len == 0)
+            {
+                exit(0);
+            }
 
-    str_len = read(sock, message, sizeof(message) - 1);
-
-    if (str_len == -1)
-        error_handling("read() error!");
-
-    printf("Message from server : '%s' ", message);
+            message[str_len] = 0;
+            printf("서버로부터 전송된 메시지 : %s\n", message);
+        } /* while(1) end */
+    }     /* else end*/
 
     close(sock);
-
     return 0;
 }
 /** error 메시지를 보여주는 함수
@@ -63,4 +85,3 @@ void error_handling(char *message)
     fputc('\n', stderr);
     exit(1);
 }
-
