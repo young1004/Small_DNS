@@ -67,6 +67,7 @@ int main(int argc, char **argv)
 
     int addr_size, str_len, state;
     char message[BUFSIZE] = "";
+    char send_message[BUFSIZE] = "";
     pid_t pid;
 
     // domain과 IP주소를 구분하는 작업을 위해 필요한 변수들
@@ -76,16 +77,17 @@ int main(int argc, char **argv)
     char *clnt_data[5];         // strtok으로 자른 데이터를 보관할 변수
 
     // domain과 IP주소간의 변환을 위한 변수들
-    struct hostent *myhost;
+    struct hostent *domain_host;
+    struct hostent *ip_host;
     struct in_addr myinaddr;
     struct sockaddr_in addr;
 
     // log 작성을 위한 변수들
-    FILE *log_file, *dns_file; // log 파일 및 dns 테이블 파일
-    char *ip_addr;             // client IP를 기록하기 위한 변수
+    FILE *log_file, *dns_file;                                    // log 파일 및 dns 테이블 파일
+    char *ip_addr;                                                // client IP를 기록하기 위한 변수
     struct tm *log_time = (struct tm *)malloc(sizeof(struct tm)); // log파일을 위한 tm 구조체
-    char dir_name[MAXSIZE]; // 월별 디렉토리 를 만들기 위한 문자열 변수
-    char lg_file_name[MAXSIZE]; // 일별 로그파일을 만들기 위한 문자열 변수
+    char dir_name[MAXSIZE];                                       // 월별 디렉토리 를 만들기 위한 문자열 변수
+    char lg_file_name[MAXSIZE];                                   // 일별 로그파일을 만들기 위한 문자열 변수
 
     get_now_time(log_time);
     sprintf(dir_name, "%d년 %d월", log_time->tm_year, log_time->tm_mon);
@@ -102,7 +104,7 @@ int main(int argc, char **argv)
 
     if (dns_file == NULL)
         printf("dns 테이블 로딩 실패!\n");
-    
+
     free(log_time);
 
     if (argc != 2)
@@ -157,7 +159,6 @@ int main(int argc, char **argv)
             close(serv_sock);
             LOGDATA lgdata;
 
-            // printf("첫번째 구간 진입 \n");
             // 구조체 초기화
             lgdata.di_cnt = 0;
             for (int i = 0; i < MAXSIZE; i++)
@@ -166,7 +167,6 @@ int main(int argc, char **argv)
             lgdata.end = (struct tm *)malloc(sizeof(struct tm));
 
             ip_addr = inet_ntoa(clnt_addr.sin_addr);
-            // fprintf(log_file, "client ip addr : %s\n", ip_addr);
 
             /* 클라이언트 ip주소 및 연결 시간 저장*/
             strcpy(lgdata.clnt_addr, ip_addr);
@@ -178,13 +178,11 @@ int main(int argc, char **argv)
             while ((str_len = read(clnt_sock, message, BUFSIZE)) != 0)
             {
                 printf("클라이언트가 보낸 문자열 : %s\n", message);
-                // printf("세번째 구간 진입 \n");
+                flag = 0;
 
                 strcpy(ip_or_domain, message);                    // 받은 message를 ip_or_domain 변수에 저장
                 strcpy(lgdata.dns_or_ip[lgdata.di_cnt], message); // 로그를 기록할 변수에 물어본 query 저장
                 lgdata.di_cnt++;
-
-                // printf("네번째 구간 진입 \n");
 
                 // strtok 함수를 이용하여 문자열을 잘라서 저장(dns와 ip 판별을 위함)
                 while (1)
@@ -236,63 +234,54 @@ int main(int argc, char **argv)
                 // ip주소일 시 실행되는 코드
                 if (flag == 0)
                 {
-                    printf("ip주소가 입력되었습니다.\n");
+                    strcpy(send_message, "ip주소가 입력되었습니다.\n");
+                    write(clnt_sock, send_message, BUFSIZE);
+
                     memset(&addr, 0, sizeof(addr));
-                    addr.sin_addr.s_addr = inet_addr(argv[1]);
+                    addr.sin_addr.s_addr = inet_addr(ip_or_domain);
 
-                    myhost = gethostbyaddr((char *)&addr.sin_addr, 4, AF_INET);
+                    ip_host = gethostbyaddr((char *)&addr.sin_addr.s_addr, 4, AF_INET);
 
-                    if (!myhost) // dns에 해당하는 값을 못 찾을시
-                    {
+                    if (!ip_host)
                         error_handling("gethost... error");
-                    }
-                    else
-                    {
-                        printf("Officially name : %s \n\n", myhost->h_name);
 
-                        puts("Aliases-----------");
-                        for (int i = 0; myhost->h_aliases[i]; i++)
-                        {
-                            puts(myhost->h_aliases[i]);
-                        }
-                        printf("Address Type : %s \n", myhost->h_addrtype == AF_INET ? "AF_INET" : "AF_INET6");
-                        puts("IP Address--------");
-                        for (int i = 0; myhost->h_addr_list[i]; i++)
-                        {
-                            puts(inet_ntoa(*(struct in_addr *)myhost->h_addr_list[i]));
-                        }
+                    printf("Officially name : %s \n\n", ip_host->h_name);
+
+                    puts("Aliases-----------");
+                    for (int i = 0; ip_host->h_aliases[i]; i++)
+                    {
+                        puts(ip_host->h_aliases[i]);
                     }
                 }
                 else if (flag == 1) // domain 입력시 실행되는 코드
                 {
-                    printf("domain이 입력되었습니다.\n");
-                    myhost = gethostbyname(ip_or_domain);
+                    domain_host = gethostbyname(ip_or_domain);
 
-                    if (myhost == 0)
+                    if (domain_host == 0)
                     {
                         printf("erro occurs .. at 'gethostbyname'.\n\n\n");
                     }
                     else
                     {
                         // 호스트 이름 출력
-                        printf("official host name : \t\t %s\n", myhost->h_name);
+                        printf("official host name : \t\t %s\n", domain_host->h_name);
                         int i = 0;
                         //호스트 별명 출력
-                        while (myhost->h_aliases[i] != NULL)
+                        while (domain_host->h_aliases[i] != NULL)
                         {
-                            printf("aliases name : \t\t%s\n", myhost->h_aliases[i]);
+                            printf("aliases name : \t\t%s\n", domain_host->h_aliases[i]);
                             i++;
                         }
 
                         //호스트 주소체계 출력
-                        printf("host address type : \t\t%d\n", myhost->h_addrtype);
+                        printf("host address type : \t\t%d\n", domain_host->h_addrtype);
                         //호스트 주소 길이 출력
-                        printf("length of host address : \t%d\n", myhost->h_length);
+                        printf("length of host address : \t%d\n", domain_host->h_length);
                         //호스트 주소를 dotted decimal 형태로 출력
                         i = 0;
-                        while (myhost->h_addr_list[i] != NULL)
+                        while (domain_host->h_addr_list[i] != NULL)
                         {
-                            myinaddr.s_addr = *((__u_long *)(myhost->h_addr_list[i]));
+                            myinaddr.s_addr = *((__u_long *)(domain_host->h_addr_list[i]));
                             printf("address for host:\t\t%s\n", inet_ntoa(myinaddr));
                             i++;
                         }
@@ -300,20 +289,25 @@ int main(int argc, char **argv)
                 }
                 else if (flag == 2) // 잘못된 ip 주소 입력
                 {
-                    printf("올바른 ip주소가 아닙니다. 올바른 ip주소를 입력해주세요.\n");
+                    strcpy(send_message, "올바른 ip주소가 아닙니다. \n");
+                    write(clnt_sock, send_message, BUFSIZE);
+                    // printf("올바른 ip주소가 아닙니다. 올바른 ip주소를 입력해주세요.\n");
                 }
                 else if (flag == 3) // 잘못된 domain 주소 입력
                 {
-                    printf("올바른 domain이 아닙니다. 올바른 domain을 입력해주세요.\n");
+                    strcpy(send_message, "올바른 domain이 아닙니다. \n");
+                    write(clnt_sock, send_message, BUFSIZE);
+                    // printf("올바른 domain이 아닙니다. 올바른 domain을 입력해주세요.\n");
                 }
-
-                // printf("7번째 구간 진입 \n");
 
                 if (lgdata.di_cnt >= MAXSIZE) // 최대 갯수의 질문을 할시 강제종료
                 {
                     //write로 변경할 것
-                    printf("1회 연결시 최대 질문 가능한 쿼리 개수인 30개를 입력하셨습니다.\n");
-                    printf("연결을 종료합니다. 더 질문하려면 재연결해 주세요.\n");
+                    strcpy(send_message, "최대 질문 가능한 쿼리 입력.\n");
+                    write(clnt_sock, send_message, BUFSIZE);
+                    strcpy(send_message, "연결을 종료합니다.\n");
+                    write(clnt_sock, send_message, BUFSIZE);
+                    // printf("연결을 종료합니다. 더 질문하려면 재연결해 주세요.\n");
                     break;
                 }
             }
@@ -321,15 +315,6 @@ int main(int argc, char **argv)
             get_now_time(lgdata.end);
 
             write_log(lgdata, log_file);
-
-            // fprintf(log_file, "********** 클라이언트 접속 정보 **********\n");
-            // fprintf(log_file, "클라이언트 IP 주소 : %s\n", lgdata.clnt_addr);
-            // fprintf(log_file, "접속 시간 : %d시 %d분 %d초\n", lgdata.start->tm_hour, lgdata.start->tm_min, lgdata.start->tm_sec);
-            // fprintf(log_file, "------물어본 dns와 쿼리 목록------\n");
-            // for (int i = 0; i < lgdata.di_cnt; i++)
-            //     fprintf(log_file, "%s\n", lgdata.dns_or_ip[i]);
-            // fprintf(log_file, "접속 종료 시간 : %d시 %d분 %d초\n", lgdata.end->tm_hour, lgdata.end->tm_min, lgdata.end->tm_sec);
-
             free(lgdata.start);
             free(lgdata.end);
 

@@ -49,16 +49,17 @@ int main(int argc, char **argv)
     {
         while (1)
         {
+            sleep(1);
             printf("insert IP or domain (q to quit) : ");
-            scanf("%s", message);
-            
-            if (!strcmp(message, "q\0"))
+            scanf("%[^\n]", message);
+            getchar();
+            if (!strcmp(message, "q"))
             {
                 shutdown(sock, SHUT_WR);
                 close(sock);
                 exit(0);
             }
-            write(sock, message, strlen(message));
+            write(sock, message, BUFSIZE);
         } /* while(1) end */
     }     /* if(pid==0) end */
     else
@@ -66,13 +67,14 @@ int main(int argc, char **argv)
         while (1)
         {
             int str_len = read(sock, message, BUFSIZE);
+
             if (str_len == 0)
             {
                 exit(0);
             }
+            printf("\n%s\n", message);
 
-            message[str_len] = 0;
-            printf("서버로부터 전송된 메시지 : %s\n", message);
+            // message[str_len] = 0;
         } /* while(1) end */
     }     /* else end*/
 
