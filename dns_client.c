@@ -14,7 +14,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#define BUFSIZE 50
+#define BUFSIZE 100
 
 void error_handling(char *message);
 
@@ -50,6 +50,7 @@ int main(int argc, char **argv)
         while (1)
         {
             sleep(1);
+            
             printf("insert IP or domain (q to quit) : ");
             scanf("%[^\n]", message);
             getchar();

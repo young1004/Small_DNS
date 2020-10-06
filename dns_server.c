@@ -5,7 +5,7 @@
 - 클라이언트 연결 시, 1회 연결당 최대 30회의 query 가능
 - domain name과 IP주소를 구분하여 자동으로 반대로 변환할 수 있음.
 - 잘못된 입력의 경우에는 예외 처리(잘못된 domain name, IP주소)
-: ip의 경우 0~255의 범위의 숫자만, domain의 경우 알파벳과 숫자만 허용
+: ip의 경우 0~255의 범위의 숫자만 허용
 - 해당 domain 혹은 자동으로 외부 DNS를 통해 업데이트
 
 * 작성 일시 : 2020-10-06
@@ -29,7 +29,7 @@
 #include <arpa/inet.h>
 #include <signal.h>
 
-#define BUFSIZE 50 // 한번에 통신 가능한 최대 BUFSIZE
+#define BUFSIZE 100 // 한번에 통신 가능한 최대 BUFSIZE
 #define MAXSIZE 30 // 클라이언트가 1회 접속당 query 가능한 최대 dns 혹은 ip 갯수
 
 // 클라이언트 로그파일을 위한 기록용 구조체 사용자 정의
@@ -72,7 +72,7 @@ int main(int argc, char **argv)
 
     // domain과 IP주소를 구분하는 작업을 위해 필요한 변수들
     int iter = 0;               // 데이터를 구분하기 위한 while문에서 사용할 변수
-    int flag = 0;               // 0: IP주소, 1: domain  2: 올바르지 않은 ip 3:특수문자가 들어간 domain
+    int flag = 0;               // 0: IP주소, 1: domain  2: 올바르지 않은 ip
     char ip_or_domain[BUFSIZE]; // strtok으로 잘라기 전의 변수를 저장하기 위한 변수
     char *clnt_data[5];         // strtok으로 자른 데이터를 보관할 변수
 
@@ -150,7 +150,6 @@ int main(int argc, char **argv)
         }
         else if (pid > 0)
         { /* 부모 프로세스인 경우 */
-            puts("연결 생성");
             close(clnt_sock);
             continue;
         }
@@ -173,11 +172,9 @@ int main(int argc, char **argv)
             get_now_time(lgdata.start);
 
             /* 자식 프로세스의 처리영역 : 데이터 수신 및 전송 */
-            printf("두번째 구간 진입 \n");
-
             while ((str_len = read(clnt_sock, message, BUFSIZE)) != 0)
             {
-                printf("클라이언트가 보낸 문자열 : %s\n", message);
+                // printf("클라이언트가 보낸 문자열 : %s\n", message);
                 flag = 0;
 
                 strcpy(ip_or_domain, message);                    // 받은 message를 ip_or_domain 변수에 저장
@@ -209,16 +206,6 @@ int main(int argc, char **argv)
                     {
                         if (isdigit(clnt_data[iter][i]) == 0)
                             flag = 1;
-
-                        // 문자열이면 특수문자가 포함되어 있는지 검사
-                        if (flag == 1)
-                        {
-                            if (isalpha(clnt_data[iter][i]) == 0 && isdigit(clnt_data[iter][i]) == 0)
-                            {
-                                flag = 3;
-                                break;
-                            }
-                        }
                     }
 
                     // 숫자이면 올바른 범위의 ip 주소인지 확인
@@ -226,7 +213,7 @@ int main(int argc, char **argv)
                         if (atoi(clnt_data[iter]) < 0 || atoi(clnt_data[iter]) > 255)
                             flag = 2;
 
-                    if (flag == 2 || flag == 3)
+                    if (flag == 2)
                         break;
                     iter++;
                 }
@@ -239,50 +226,58 @@ int main(int argc, char **argv)
 
                     memset(&addr, 0, sizeof(addr));
                     addr.sin_addr.s_addr = inet_addr(ip_or_domain);
+                    printf("ip 데이터 : %s\n", ip_or_domain);
 
-                    ip_host = gethostbyaddr((char *)&addr.sin_addr.s_addr, 4, AF_INET);
+                    ip_host = gethostbyaddr((char *)&addr.sin_addr, 4, AF_INET);
 
                     if (!ip_host)
-                        error_handling("gethost... error");
-
-                    printf("Officially name : %s \n\n", ip_host->h_name);
-
-                    puts("Aliases-----------");
-                    for (int i = 0; ip_host->h_aliases[i]; i++)
                     {
-                        puts(ip_host->h_aliases[i]);
+                        strcpy(send_message, "잘못된 IP 입력. 프로그램 종료\n");
+                        write(clnt_sock, send_message, BUFSIZE);
+                        close(clnt_sock);
+                        error_handling("잘못된 IP 입력으로 인한 종료");
                     }
+
+                    sprintf(send_message, "도메인 주소 : %s", domain_host->h_aliases[0]);
+                    write(clnt_sock, send_message, BUFSIZE);
+
+                    // sprintf(send_message, "정식 도메인 : %s \n", ip_host->h_name);
+                    // write(clnt_sock, send_message, BUFSIZE);
+
+
                 }
                 else if (flag == 1) // domain 입력시 실행되는 코드
                 {
+                    strcpy(send_message, "domain이 입력되었습니다.\n");
+                    write(clnt_sock, send_message, BUFSIZE);
+
                     domain_host = gethostbyname(ip_or_domain);
 
                     if (domain_host == 0)
                     {
-                        printf("erro occurs .. at 'gethostbyname'.\n\n\n");
+                        strcpy(send_message, "잘못된 domain 입력. 프로그램 종료\n");
+                        write(clnt_sock, send_message, BUFSIZE);
+                        close(clnt_sock);
+                        error_handling("잘못된 도메인 입력으로 인한 종료");
                     }
                     else
                     {
-                        // 호스트 이름 출력
-                        printf("official host name : \t\t %s\n", domain_host->h_name);
+                        // sprintf(send_message, "정식 도메인: %s", domain_host->h_name);
+                        // write(clnt_sock, send_message, BUFSIZE);
+
                         int i = 0;
-                        //호스트 별명 출력
                         while (domain_host->h_aliases[i] != NULL)
                         {
-                            printf("aliases name : \t\t%s\n", domain_host->h_aliases[i]);
+                            sprintf(send_message, "도메인 주소 : %s", domain_host->h_aliases[i]);
+                            write(clnt_sock, send_message, BUFSIZE);
                             i++;
                         }
-
-                        //호스트 주소체계 출력
-                        printf("host address type : \t\t%d\n", domain_host->h_addrtype);
-                        //호스트 주소 길이 출력
-                        printf("length of host address : \t%d\n", domain_host->h_length);
-                        //호스트 주소를 dotted decimal 형태로 출력
                         i = 0;
                         while (domain_host->h_addr_list[i] != NULL)
                         {
                             myinaddr.s_addr = *((__u_long *)(domain_host->h_addr_list[i]));
-                            printf("address for host:\t\t%s\n", inet_ntoa(myinaddr));
+                            sprintf(send_message, "domain의 IP: %s", inet_ntoa(myinaddr));
+                            write(clnt_sock, send_message, BUFSIZE);
                             i++;
                         }
                     }
@@ -291,13 +286,6 @@ int main(int argc, char **argv)
                 {
                     strcpy(send_message, "올바른 ip주소가 아닙니다. \n");
                     write(clnt_sock, send_message, BUFSIZE);
-                    // printf("올바른 ip주소가 아닙니다. 올바른 ip주소를 입력해주세요.\n");
-                }
-                else if (flag == 3) // 잘못된 domain 주소 입력
-                {
-                    strcpy(send_message, "올바른 domain이 아닙니다. \n");
-                    write(clnt_sock, send_message, BUFSIZE);
-                    // printf("올바른 domain이 아닙니다. 올바른 domain을 입력해주세요.\n");
                 }
 
                 if (lgdata.di_cnt >= MAXSIZE) // 최대 갯수의 질문을 할시 강제종료
@@ -307,7 +295,6 @@ int main(int argc, char **argv)
                     write(clnt_sock, send_message, BUFSIZE);
                     strcpy(send_message, "연결을 종료합니다.\n");
                     write(clnt_sock, send_message, BUFSIZE);
-                    // printf("연결을 종료합니다. 더 질문하려면 재연결해 주세요.\n");
                     break;
                 }
             }
@@ -321,6 +308,8 @@ int main(int argc, char **argv)
             exit(0);
         }
     }
+
+    fprintf(log_file, "********** 테스트 코드!! **********\n");
     fclose(log_file);
     fclose(dns_file);
     return 0;
